@@ -1,7 +1,9 @@
 import chess
 import numpy as np
+import random
 import torch
 import torch.nn.functional as F
+from tqdm import tqdm
 
 from helper import move_index_mapper, board_to_tensor
 from policy_network import PolicyNetwork
@@ -10,39 +12,45 @@ def game_episode(p_net, move_index, index_move):
     board = chess.Board()
 
     end = False
-    sar_history = []
+    sa_history = []
     log_probs = []
-    black = False
+    white = True
+    reward = None
     # print(board)
     while not end:
         turn = board.fullmove_number
-        # if black:
-        #     print(f"Move: {turn}")
-        black = ~black
-        tensor_board = board_to_tensor(board)
-        action_logits = p_net(tensor_board)
-
+        
         legal_moves = list(board.generate_legal_moves())
-        legal_move_indices = [move_index[move] for move in legal_moves]
-        legal_logits = action_logits[legal_move_indices]
 
-        action_probs = F.softmax(legal_logits, dim=0)
-        action_distribution = torch.distributions.Categorical(action_probs)
-        action_ix = action_distribution.sample()
-        log_prob = action_distribution.log_prob(action_ix)
+        action = None
+        if white:
+            tensor_board = board_to_tensor(board)
+            action_logits = p_net(tensor_board).squeeze(0)
 
-        action = legal_moves[action_ix.item()]
+            legal_move_indices = [move_index[move] for move in legal_moves]
+            legal_logits = action_logits[legal_move_indices]
+
+            action_probs = F.softmax(legal_logits, dim=0)
+            action_distribution = torch.distributions.Categorical(action_probs)
+            action_ix = action_distribution.sample()
+            log_prob = action_distribution.log_prob(action_ix)
+
+            action = legal_moves[action_ix.item()]
+            log_probs.append(log_prob)
+        else:
+            action = random.choice(legal_moves)
+
+        sa_history.append((board.fen(), action))
         board.push(action)
 
-        sar_history.append((board.fen(), action, 0))
-        log_probs.append(log_prob)
+        white = ~white
 
         # print(board)
         # end = True
 
         if board.is_game_over(claim_draw=True):
             reward = board.result(claim_draw=True)
-            print(reward)
+            # print(reward)
 
             if reward == "1-0":
                 reward = 1
@@ -50,12 +58,12 @@ def game_episode(p_net, move_index, index_move):
                 reward = -1
             else:
                 reward = 0
-            sar_history.append((board.fen(), action, reward))
-            print(reward)
+
+            # print(reward)
             end = True
-            print(board)
+            # print(board)
     
-    return sar_history, log_probs
+    return sa_history, log_probs, reward
 
 def reinforce():
     p_net = PolicyNetwork()
@@ -64,28 +72,33 @@ def reinforce():
     lengths = []
     rewards = []
 
-    gamma = 0.99
     lr_p_net = 2**-13
     optimizer = torch.optim.Adam(p_net.parameters(), lr=lr_p_net)
 
-    for i in range(10):
-        sar_history, log_probs = game_episode(p_net, move_index, index_move)
+    num_episodes = 1000
+    win_counter = 0
+    loss_counter = 0
+    for i in tqdm(range(num_episodes)):
+        sa_history, log_probs, final_reward = game_episode(p_net, move_index, index_move)
 
-        final_reward = sar_history[-1][2]
+        if final_reward == 1:
+            win_counter += 1
+        elif final_reward == -1:
+            loss_counter += 1
 
-        loss = 0
-        for log_prob in log_probs:
-            loss += -log_prob * final_reward
+        loss = sum(-log_prob * final_reward for log_prob in log_probs)
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        print(f"Episode {i + 1}, Reward: {final_reward}, Loss: {loss.item():.4f}")
+        # print(f"Episode {i + 1}, Reward: {final_reward}, Loss: {loss.item():.4f}")
 
-        if i == 9:
+        if i == num_episodes - 1:
             board = chess.Board()
-            board.set_fen(sar_history[-1][0])
+            board.set_fen(sa_history[-1][0])
+            torch.save(p_net.state_dict(), "model_weights.pth")
+            print(f"Played {num_episodes} games. Win: {win_counter} | Loss: {loss_counter}")
 
 if __name__ == "__main__":
     reinforce()
