@@ -5,14 +5,14 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from helper import move_index_mapper, board_to_tensor
+from helper import generate_random_kqk_position, select_action, encode_board
 from policy_network import PolicyNetwork
 
 def game_episode(p_net, move_index, index_move):
-    board = chess.Board()
+    board = generate_random_kqk_position()
 
     end = False
-    sa_history = []
+    sar_history = []
     log_probs = []
     white = True
     reward = None
@@ -24,23 +24,16 @@ def game_episode(p_net, move_index, index_move):
 
         action = None
         if white:
-            tensor_board = board_to_tensor(board)
-            action_logits = p_net(tensor_board).squeeze(0)
-
-            legal_move_indices = [move_index[move] for move in legal_moves]
-            legal_logits = action_logits[legal_move_indices]
-
-            action_probs = F.softmax(legal_logits, dim=0)
-            action_distribution = torch.distributions.Categorical(action_probs)
-            action_ix = action_distribution.sample()
-            log_prob = action_distribution.log_prob(action_ix)
-
-            action = legal_moves[action_ix.item()]
-            log_probs.append(log_prob)
+            state = encode_board(board)
+            action, probabilities = select_action(state, board)
+            print(action)
+            print(probabilities)
+            end = True
         else:
             action = random.choice(legal_moves)
 
-        sa_history.append((board.fen(), action))
+        reward = -0.01
+        sar_history.append((board.fen(), action, reward))
         board.push(action)
 
         white = ~white
@@ -49,15 +42,12 @@ def game_episode(p_net, move_index, index_move):
         # end = True
 
         if board.is_game_over(claim_draw=True):
-            reward = board.result(claim_draw=True)
-            # print(reward)
+            game_result = board.result(claim_draw=True)
 
-            if reward == "1-0":
+            if game_result == "1-0":
                 reward = 1
-            elif reward == "0-1":
-                reward = -1
             else:
-                reward = 0
+                reward = -1
 
             # print(reward)
             end = True
