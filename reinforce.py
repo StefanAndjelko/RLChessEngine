@@ -5,15 +5,30 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from helper import generate_random_kqk_position, generate_easy_kqk_position, select_action, encode_board, action_index_to_move
+from helper import generate_random_kqk_position, generate_simple_positions, select_action, encode_board, action_index_to_move
 from policy_network import PolicyNetwork
 
 def game_episode(p_net, iteration):
+    board1, board2, board3 = generate_simple_positions()
     board = None
     if iteration < 10000:
-        board = generate_easy_kqk_position()
+        # board = random.choice([board1, board2, board3])
+        board = random.choice([board1, board2, board3])
+    elif iteration < 15000:
+        if random.uniform(0, 1) < 0.5:
+            board = random.choice([board1, board2])
+        else:
+            board = board3
     elif iteration < 20000:
-        board = generate_easy_kqk_position() if random.random() < 0.7 else generate_random_kqk_position()
+        if random.uniform(0, 1) < 0.2:
+            board = random.choice([board1, board2])
+        else:
+            board = board3
+    elif iteration < 25000:
+        if random.uniform(0, 1) < 0.05:
+            board = random.choice([board1, board2])
+        else:
+            board = board3
     else:
         board = generate_random_kqk_position()
 
@@ -39,8 +54,11 @@ def game_episode(p_net, iteration):
             return sa_history, log_probs, rewards
         
         legal_moves = list(board.generate_legal_moves())
-        black_move = random.choice(legal_moves)
-        board.push(black_move)
+        capturing_moves = [move for move in legal_moves if board.is_capture(move)]
+        if capturing_moves:
+            board.push(capturing_moves[0])
+        else:
+            board.push(random.choice(legal_moves))
         
         if board.is_game_over(claim_draw=True):
             result = board.result(claim_draw=True)
@@ -48,26 +66,13 @@ def game_episode(p_net, iteration):
             rewards.append(reward)
             return sa_history, log_probs, rewards
         
-        reward = -0.5
+        reward = 0
         
-        king_sq = board.king(chess.BLACK)
-        king_file, king_rank = chess.square_file(king_sq), chess.square_rank(king_sq)
-
-        safe_squares = 0
-        for dx, dy in [(1,0), (-1,0), (0,1), (0,-1), (1,1), (-1,1), (1,-1), (-1,-1)]:
-            target_file = king_file + dx
-            target_rank = king_rank + dy
-            if 0 <= target_file < 8 and 0 <= target_rank < 8:
-                target_sq = chess.square(target_file, target_rank)
-                if board.is_legal(chess.Move(king_sq, target_sq)):
-                    safe_squares += 1
+        # king_sq = board.king(chess.BLACK)
+        # king_file, king_rank = chess.square_file(king_sq), chess.square_rank(king_sq)
         
-        mobility_bonus = (prev_king_mobility - safe_squares) * 0.1
-        reward += mobility_bonus
-        prev_king_mobility = safe_squares
-        
-        if min(7 - king_file, king_file) == 0 or min(7 - king_rank, king_rank) == 0:
-            reward += 0.3
+        # if min(7 - king_file, king_file) == 0 or min(7 - king_rank, king_rank) == 0:
+        #     reward += 0.002
         
         rewards.append(reward)
 
@@ -77,11 +82,11 @@ def reinforce():
     lengths = []
     rewards = []
 
-    lr_p_net = 2**-12
+    lr_p_net = 2**-13
     gamma = 1
     optimizer = torch.optim.Adam(p_net.parameters(), lr=lr_p_net)
 
-    num_episodes = 10000
+    num_episodes = 50000
     win_counter = 0
     won_games = []
     for i in tqdm(range(num_episodes)):
@@ -109,11 +114,10 @@ def reinforce():
         entropy_bonus = 0
         for log_prob, g in zip(log_probs, returns):
             loss.append(-log_prob * g)
-            entropy_bonus -= 0.01 * torch.exp(log_prob) * log_prob
 
         
         optimizer.zero_grad()
-        total_loss = torch.stack(loss).sum() + entropy_bonus
+        total_loss = torch.stack(loss).sum()
         total_loss.backward()
         optimizer.step()
         
@@ -128,6 +132,3 @@ def reinforce():
 
 if __name__ == "__main__":
     reinforce()
-
-
-

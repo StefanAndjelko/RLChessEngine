@@ -30,11 +30,12 @@ def encode_board(board):
                 safe_squares += 1
 
     safe_squares /= 8
-
-    distance = max(abs(w_q_x * 7 - b_k_x * 7), abs(w_q_y * 7 - b_k_y * 7))
-    distance /= 7
+    
+    bk_wq_distance = max(abs(w_q_x * 7 - b_k_x * 7), abs(w_q_y * 7 - b_k_y * 7)) / 7
+    bk_wk_distance = max(abs(w_k_x * 7 - b_k_x * 7), abs(w_k_y * 7 - b_k_y * 7)) / 7
+    wk_wq_distnace= max(abs(w_q_x * 7 - w_k_x * 7), abs(w_q_y * 7 - w_k_y * 7)) / 7
      
-    return np.array([w_q_x, w_q_y, w_k_x, w_k_y, b_k_x, b_k_y, distance, safe_squares], dtype='f')
+    return np.array([w_q_x, w_q_y, w_k_x, w_k_y, b_k_x, b_k_y, bk_wq_distance, bk_wk_distance, wk_wq_distnace, safe_squares], dtype='f')
 
 def kings_not_adjacent(wk_square, bk_square):
     return not chess.SquareSet(chess.BB_KING_ATTACKS[wk_square] & (1 << bk_square))
@@ -72,6 +73,35 @@ def generate_random_kqk_position():
         if board.is_valid():
             return board
 
+def generate_trivial_kqk_position():
+    boards = []
+    board = chess.Board(None)
+    board.set_piece_at(chess.B5, chess.Piece(chess.QUEEN, chess.WHITE))
+    board.set_piece_at(chess.C7, chess.Piece(chess.KING, chess.WHITE))
+    board.set_piece_at(chess.A8, chess.Piece(chess.KING, chess.BLACK))
+    board.turn = chess.WHITE
+    boards.append(board)
+    board = chess.Board(None)
+    board.set_piece_at(chess.B4, chess.Piece(chess.QUEEN, chess.WHITE))
+    board.set_piece_at(chess.C2, chess.Piece(chess.KING, chess.WHITE))
+    board.set_piece_at(chess.A1, chess.Piece(chess.KING, chess.BLACK))
+    board.turn = chess.WHITE
+    boards.append(board)
+    board = chess.Board(None)
+    board.set_piece_at(chess.G4, chess.Piece(chess.QUEEN, chess.WHITE))
+    board.set_piece_at(chess.F2, chess.Piece(chess.KING, chess.WHITE))
+    board.set_piece_at(chess.H1, chess.Piece(chess.KING, chess.BLACK))
+    board.turn = chess.WHITE
+    boards.append(board)
+    board = chess.Board(None)
+    board.set_piece_at(chess.G5, chess.Piece(chess.QUEEN, chess.WHITE))
+    board.set_piece_at(chess.F7, chess.Piece(chess.KING, chess.WHITE))
+    board.set_piece_at(chess.H8, chess.Piece(chess.KING, chess.BLACK))
+    board.turn = chess.WHITE
+    boards.append(board)
+
+    return random.choice(boards)
+
 def generate_easy_kqk_position():
     boards = []
     board = chess.Board(None)
@@ -100,8 +130,38 @@ def generate_easy_kqk_position():
     boards.append(board)
 
     return random.choice(boards)
-    # return board
 
+def generate_medium_kqk_position():
+    boards = []
+    board = chess.Board(None)
+    board.set_piece_at(chess.G3, chess.Piece(chess.QUEEN, chess.WHITE))
+    board.set_piece_at(chess.F7, chess.Piece(chess.KING, chess.WHITE))
+    board.set_piece_at(chess.H5, chess.Piece(chess.KING, chess.BLACK))
+    board.turn = chess.WHITE
+    boards.append(board)
+    board = chess.Board(None)
+    board.set_piece_at(chess.F7, chess.Piece(chess.QUEEN, chess.WHITE))
+    board.set_piece_at(chess.B6, chess.Piece(chess.KING, chess.WHITE))
+    board.set_piece_at(chess.D8, chess.Piece(chess.KING, chess.BLACK))
+    board.turn = chess.WHITE
+    boards.append(board)
+    board = chess.Board(None)
+    board.set_piece_at(chess.B6, chess.Piece(chess.QUEEN, chess.WHITE))
+    board.set_piece_at(chess.C2, chess.Piece(chess.KING, chess.WHITE))
+    board.set_piece_at(chess.A4, chess.Piece(chess.KING, chess.BLACK))
+    board.turn = chess.WHITE
+    boards.append(board)
+    board = chess.Board(None)
+    board.set_piece_at(chess.F2, chess.Piece(chess.QUEEN, chess.WHITE))
+    board.set_piece_at(chess.B3, chess.Piece(chess.KING, chess.WHITE))
+    board.set_piece_at(chess.D1, chess.Piece(chess.KING, chess.BLACK))
+    board.turn = chess.WHITE
+    boards.append(board)
+
+    return random.choice(boards)
+
+def generate_simple_positions():
+    return generate_trivial_kqk_position(), generate_easy_kqk_position(), generate_medium_kqk_position()
 
 def is_valid_queen_move(from_sq, dir_idx, dist, board):
     dx, dy = DIRECTIONS[dir_idx]
